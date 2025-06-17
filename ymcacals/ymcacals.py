@@ -5,6 +5,7 @@
 import argparse
 import csv
 import os.path
+import re
 import sys
 
 from icalendar import Calendar, Event
@@ -42,33 +43,55 @@ class CalendarMerger:
         combined_cal.add('prodid', '-//icalcombine//NONSGML//EN')
         combined_cal.add('version', '2.0')
         combined_cal.add('x-wr-calname', "Lifeguard Schedule")
+        class NoMatch(Exception):
+            "Exception raised when a filtering match fails"
+            # pylint: disable=unnecessary-pass
+            pass
+
         with open(self.urls, encoding="utf-8") as urlf:
             rdr = csv.DictReader(urlf)
             assert "url" in rdr.fieldnames
-            attrs = set(rdr.fieldnames) - set(["url"])
+            # attribute/value pairs for substitution
+            params = {}
+            # regular expression patters for filtering
+            matches = {}
+            fieldnames = set(rdr.fieldnames) - set(["url"])
             for row in rdr:
                 url = row["url"].strip()
-                params = {}
-                for attr in attrs:
-                    params[attr] = row[attr].strip()
+                for key in fieldnames:
+                    if key.startswith("match:"):
+                        # This is a filtering attribute
+                        _, field = key.split(":", maxsplit=1)
+                        matches[field] = row[key].strip()
+                    else:
+                        params[key] = row[key].strip()
                 req = requests.get(url, timeout=20.0)
                 cal = Calendar.from_ical(req.text)
                 for event in cal.walk("VEVENT"):
-                    if event["UID"] in ("calendarExpiredEvent",
-                                        "calendarExpiringEvent"):
-                        continue
-                    copied_event = Event()
-                    for attr in event:
-                        param = params.get(attr) or event[attr]
+                    try:
+                        for field, pat in matches.items():
+                            if re.match(pat, event[field], re.I) is None:
+                                raise NoMatch(f"{pat}/{event[field]}")
+                    except NoMatch as exc:
                         if self.verbose:
-                            print("attr:", attr, param)
-                        if isinstance(event[attr], list):
-                            for element in event[attr]:
-                                copied_event.add(attr, element)
-                        else:
-                            copied_event.add(attr, param)
-                    combined_cal.add_component(copied_event)
+                            print("Filter miss:", exc.args[0], file=sys.stderr)
+                        continue
+                    combined_cal.add_component(self.copy_event(event, params))
         return combined_cal
+
+    def copy_event(self, event, params):
+        "Copy an event, making desired field substitutions"
+        copied_event = Event()
+        for attr in event:
+            param = params.get(attr) or event[attr]
+            if self.verbose and event[attr] != param:
+                print("attr:", attr, event[attr], "->", param, file=sys.stderr)
+            if isinstance(event[attr], list):
+                for element in event[attr]:
+                    copied_event.add(attr, element)
+            else:
+                copied_event.add(attr, param)
+        return copied_event
 
 
 def main():
