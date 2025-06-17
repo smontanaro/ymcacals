@@ -3,6 +3,7 @@
 "Merge multiple ICS URLs, transforming user-defined attributes"
 
 import argparse
+import csv
 import os.path
 import sys
 
@@ -28,7 +29,7 @@ class CalendarMerger:
 
     @property
     def urls(self):
-        "file containing urls and params to process"
+        "CSV file containing urls and params to process"
         return self._urls
 
     @urls.setter
@@ -42,17 +43,14 @@ class CalendarMerger:
         combined_cal.add('version', '2.0')
         combined_cal.add('x-wr-calname', "Lifeguard Schedule")
         with open(self.urls, encoding="utf-8") as urlf:
-            for line in urlf:
-                try:
-                    url, pstr = line.split(maxsplit=1)
-                    params = {}
-                    for pair in pstr.strip().split(","):
-                        key, val = pair.split("=")
-                        params[key] = val
-                except ValueError:
-                    url = line
-                    params = {}
-                url = url.strip()
+            rdr = csv.DictReader(urlf)
+            assert "url" in rdr.fieldnames
+            attrs = set(rdr.fieldnames) - set(["url"])
+            for row in rdr:
+                url = row["url"].strip()
+                params = {}
+                for attr in attrs:
+                    params[attr] = row[attr].strip()
                 req = requests.get(url, timeout=20.0)
                 cal = Calendar.from_ical(req.text)
                 for event in cal.walk("VEVENT"):
