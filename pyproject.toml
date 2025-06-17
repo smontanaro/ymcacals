@@ -1,0 +1,40 @@
+[build-system]
+requires = [
+    "setuptools>=63.0",
+    "trove-classifiers",
+    "wheel",
+]
+
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ymcacals"
+version = "0.0.1"
+authors = [
+    { name = "Skip Montanaro", email = "skip.montanaro@gmail.com" },
+]
+description = "Simple script to merge multiple lifeguard schedule calendars"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "icalendar>=6.3.1",
+    "requests>=2.32.3"
+]
+
+[tool.setuptools.packages.find]
+    where = ["."]
+    include = ["ymcacals"]
+    namespaces = false
+
+[project.urls]
+"Homepage" = "https://github.com/smontanaro/ymcacals/tree/main/ymcacals"
+"Bug Tracker" = "https://github.com/smontanaro/ymcacals/issues"
+
+[project.scripts]
+    ymcacals = "ymcacals.ymcacals:main"
