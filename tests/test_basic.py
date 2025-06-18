@@ -1,12 +1,25 @@
 # simple no-op test so tox doesn't keep complaining until I get real tests...
 
 from pathlib import Path
+import subprocess
+import sys
+import time
 
 import icalendar
 
 from ymcacals.ymcacals import CalendarMerger
 
 def test_basic():
-    ics_path = Path(__file__).parent / "skip.ics"
-    calendar = icalendar.Calendar.from_ical(ics_path.read_bytes())
-    assert calendar.events
+    server = subprocess.Popen([sys.executable, "-m", "http.server", "-d", "./tests"])
+    # give server time to start
+    time.sleep(0.25)
+    try:
+        merger = CalendarMerger()
+        merger.verbose = False
+        merger.urls = Path(__file__).parent / "skip.csv"
+        merged = merger.merge_cals()
+        assert len(merged.events) == 29
+        for event in merged.events:
+            assert event["SUMMARY"].lower() == "skip m"
+    finally:
+        server.kill()
