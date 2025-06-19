@@ -14,9 +14,8 @@ def test_basic():
     # give server time to start
     time.sleep(0.25)
     try:
-        merger = CalendarMerger()
+        merger = CalendarMerger(Path(__file__).parent / "skip.csv", True)
         merger.verbose = False
-        merger.urls = Path(__file__).parent / "skip.csv"
         merged = merger.merge_cals()
         assert len(merged.events) == 29
         for event in merged.events:
