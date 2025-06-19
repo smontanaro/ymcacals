@@ -7,6 +7,7 @@ import csv
 import os.path
 import re
 import sys
+import uuid
 
 from icalendar import Calendar, Event
 import requests
@@ -14,9 +15,20 @@ import requests
 
 class CalendarMerger:
     "The meat of the operation"
-    def __init__(self):
-        self._verbose = False
-        self._urls = "/dev/null"
+    def __init__(self, urls, confirmed):
+        self.verbose = False
+        self.urls = urls
+        self.confirmed = confirmed
+
+    @property
+    def confirmed(self):
+        "Confirmed flag"
+        return self._confirmed
+
+    @confirmed.setter
+    def confirmed(self, value):
+        assert value in (True, False)
+        self._confirmed = value
 
     @property
     def verbose(self):
@@ -91,6 +103,15 @@ class CalendarMerger:
                     copied_event.add(attr, element)
             else:
                 copied_event.add(attr, param)
+
+        # Confirmed status is special. We blindly override whatever is present
+        # as the STATUS attribute, and require the event has a UID. If it
+        # lacks one, we create one.
+        if "UID" not in event:
+            print("Cowardly refuse to set STATUS without a UID. Generating one.",
+                  file=sys.stderr)
+            copied_event["UID"] = uuid.uuid4().hex
+        copied_event["STATUS"] = "CONFIRMED" if self.confirmed else "CANCELLED"
         return copied_event
 
 
@@ -100,10 +121,13 @@ def main():
     parser.add_argument("-o", "--output", dest="output")
     parser.add_argument("-v", "--verbose", dest="verbose", default=False,
                         action="store_true")
+    parser.add_argument("-c", "--confirmed", dest="confirmed", default=True,
+                        action="store_true")
+    parser.add_argument("-C", "--cancelled", dest="confirmed", default=False,
+                        action="store_false")
     args = parser.parse_args()
 
-    merger = CalendarMerger()
-    merger.urls = args.urls
+    merger = CalendarMerger(args.urls, args.confirmed)
     merger.verbose = args.verbose
     combined_cal = merger.merge_cals()
     if args.output is not None:
