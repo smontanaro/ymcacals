@@ -7,7 +7,6 @@ import csv
 import os.path
 import re
 import sys
-import uuid
 
 from icalendar import Calendar, Event
 import requests
@@ -68,6 +67,7 @@ class CalendarMerger:
             # regular expression patters for filtering
             matches = {}
             fieldnames = set(rdr.fieldnames) - set(["url"])
+            uids = set()
             for row in rdr:
                 url = row["url"].strip()
                 for key in fieldnames:
@@ -88,7 +88,10 @@ class CalendarMerger:
                         if self.verbose:
                             print("Filter miss:", exc.args[0], file=sys.stderr)
                         continue
-                    combined_cal.add_component(self.copy_event(event, params))
+                    copy = self.copy_event(event, params)
+                    assert copy["UID"] not in uids
+                    uids.add(copy["UID"])
+                    combined_cal.add_component(copy)
         return combined_cal
 
     def copy_event(self, event, params):
@@ -110,9 +113,21 @@ class CalendarMerger:
         if "UID" not in event:
             print("Cowardly refuse to set STATUS without a UID. Generating one.",
                   file=sys.stderr)
-            copied_event["UID"] = uuid.uuid4().hex
+            # We use the copied event as the source for the UID because you
+            # might have two lifeguards with identical start/end times and a
+            # SUMMARY of "lifeguard." That wouldn't be very unique. We assume
+            # the SUMMARY field is overwritten to reflect the lifeguard's name.
+            copied_event["UID"] = self.generate_uid(copied_event)
         copied_event["STATUS"] = "CONFIRMED" if self.confirmed else "CANCELLED"
         return copied_event
+
+    def generate_uid(self, event):
+        "Generate repeatable uid."
+        uid = ""
+        for key in ("DTSTART", "DTEND", "SUMMARY"):
+            uid += str(event.get(key, ""))
+        assert uid
+        return hash(uid)
 
 
 def main():
