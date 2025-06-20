@@ -124,8 +124,11 @@ class CalendarMerger:
     def generate_uid(self, event):
         "Generate repeatable uid."
         uid = ""
-        for key in ("DTSTART", "DTEND", "SUMMARY"):
-            uid += str(event.get(key, ""))
+        for key in ("DTSTART", "DTEND"):
+            if key in event:
+                uid += event[key].dt.isoformat()
+        if "SUMMARY" in event:
+            uid += str(event["SUMMARY"])
         assert uid
         return hash(uid)
 
