@@ -27,7 +27,11 @@ def test_basic():
         merger.verbose = False
         merged = merger.merge_cals()
         assert len(merged.events) == 29
+        uids = set()
         for event in merged.events:
             assert event["SUMMARY"].lower() == "skip m"
+            uids.add(event["UID"])
+        assert len(uids) == len(merged.events)
+
     finally:
         server.kill()
