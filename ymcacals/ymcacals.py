@@ -11,13 +11,14 @@ import sys
 from icalendar import Calendar, Event
 import requests
 
-
+# pylint: disable=too-many-instance-attributes
 class CalendarMerger:
     "The meat of the operation"
     def __init__(self, urls, confirmed):
         self.verbose = False
         self.urls = urls
         self.confirmed = confirmed
+        self.test_pfx = ""
 
     @property
     def confirmed(self):
@@ -49,6 +50,17 @@ class CalendarMerger:
         assert os.path.exists(urlfile)
         self._urls = urlfile
 
+    # Just for testing...
+    @property
+    def test_pfx(self):
+        "URL prefix for pytest server"
+        return self._test_pfx
+
+    @test_pfx.setter
+    def test_pfx(self, value):
+        assert isinstance(value, str)
+        self._test_pfx = value
+
     def merge_cals(self):
         combined_cal = Calendar()
         combined_cal.add('prodid', '-//icalcombine//NONSGML//EN')
@@ -69,7 +81,7 @@ class CalendarMerger:
             fieldnames = set(rdr.fieldnames) - set(["url"])
             uids = set()
             for row in rdr:
-                url = row["url"].strip()
+                url = row["url"].strip().replace("{server}", self.test_pfx)
                 for key in fieldnames:
                     if key.startswith("match:"):
                         # This is a filtering attribute
