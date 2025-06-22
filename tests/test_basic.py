@@ -10,20 +10,14 @@ import requests
 
 from ymcacals.ymcacals import CalendarMerger
 
-def test_basic():
-    server = subprocess.Popen([sys.executable, "-m", "http.server", "-d", "./tests"])
-    for _i in range(10):
-        # give server time to start
-        time.sleep(0.25)
-        try:
-            x = requests.get("http://localhost:8000/skip.ics")
-        except requests.exceptions.ConnectionError:
-            continue
-        break
-    else:
-        raise requests.exceptions.ConnectionError("Too many failed connection attempts")
-    try:
+
+def test_basic(httpserver):
+    with open("./tests/skip.ics") as ics:
+        httpserver.expect_request("/skip.ics"). \
+            respond_with_data(ics.read(), content_type="text/plain")
+        x = requests.get(httpserver.url_for("/skip.ics"))
         merger = CalendarMerger(Path(__file__).parent / "skip.csv", True)
+        merger.test_pfx = httpserver.url_for("/")
         merger.verbose = False
         merged = merger.merge_cals()
         assert len(merged.events) == 29
@@ -32,6 +26,3 @@ def test_basic():
             assert event["SUMMARY"].lower() == "skip m"
             uids.add(event["UID"])
         assert len(uids) == len(merged.events)
-
-    finally:
-        server.kill()
