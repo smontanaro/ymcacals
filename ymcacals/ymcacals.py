@@ -4,6 +4,7 @@
 
 import argparse
 import csv
+import datetime
 import os.path
 import re
 import sys
@@ -14,11 +15,33 @@ import requests
 # pylint: disable=too-many-instance-attributes
 class CalendarMerger:
     "The meat of the operation"
-    def __init__(self, urls, confirmed):
-        self.verbose = False
-        self.urls = urls
-        self.confirmed = confirmed
+    def __init__(self, args):
+        self.verbose = args.verbose
+        self.urls = args.urls
+        self.confirmed = args.confirmed
         self.test_pfx = ""
+        self.start = args.start
+        self.end = args.end
+
+    @property
+    def start(self):
+        "Start flag"
+        return self._start
+
+    @start.setter
+    def start(self, value):
+        assert isinstance(value, datetime.date)
+        self._start = value
+
+    @property
+    def end(self):
+        "End flag"
+        return self._end
+
+    @end.setter
+    def end(self, value):
+        assert isinstance(value, datetime.date)
+        self._end = value
 
     @property
     def confirmed(self):
@@ -61,6 +84,7 @@ class CalendarMerger:
         assert isinstance(value, str)
         self._test_pfx = value
 
+    # pylint: disable=too-many-branches
     def merge_cals(self):
         combined_cal = Calendar()
         combined_cal.add('prodid', '-//icalcombine//NONSGML//EN')
@@ -99,6 +123,22 @@ class CalendarMerger:
                     except NoMatch as exc:
                         if self.verbose:
                             print("Filter miss:", exc.args[0], file=sys.stderr)
+                        continue
+                    if "DTSTART" not in event or "DTEND" not in event:
+                        if self.verbose:
+                            print("Event without date/time details",
+                                  file=sys.stderr)
+                            continue
+                    start_date = event["DTSTART"].dt.date()
+                    end_date = event["DTEND"].dt.date()
+                    if self.verbose:
+                        print(self.start, start_date, end_date, self.end,
+                              self.start <= start_date <= end_date <= self.end,
+                              file=sys.stderr)
+                    if not self.start <= start_date <= end_date <= self.end:
+                        if self.verbose:
+                            print("Event date/time out of range",
+                                  file=sys.stderr)
                         continue
                     copy = self.copy_event(event, params)
                     assert copy["UID"] not in uids
@@ -145,10 +185,23 @@ class CalendarMerger:
         return hash(uid)
 
 
+# from https://gist.github.com/monkut/e60eea811ef085a6540f
+def parse_date_arg(date_str):
+    """custom argparse *date* type for user dates"""
+    try:
+        return datetime.datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError as exc:
+        msg = f"Date ({date_str}) not valid! Expected format, YYYY-MM-DD!"
+        raise argparse.ArgumentTypeError(msg) from exc
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-u", "--urls", dest="urls", required=True)
     parser.add_argument("-o", "--output", dest="output")
+    parser.add_argument("-s", "--start", dest="start", type=parse_date_arg,
+                        default=datetime.date(2000, 1, 1))
+    parser.add_argument("-e", "--end", dest="end", type=parse_date_arg,
+                        default=datetime.date(2050, 12, 31))
     parser.add_argument("-v", "--verbose", dest="verbose", default=False,
                         action="store_true")
     parser.add_argument("-c", "--confirmed", dest="confirmed", default=True,
@@ -157,7 +210,7 @@ def main():
                         action="store_false")
     args = parser.parse_args()
 
-    merger = CalendarMerger(args.urls, args.confirmed)
+    merger = CalendarMerger(args)
     merger.verbose = args.verbose
     combined_cal = merger.merge_cals()
     if args.output is not None:
