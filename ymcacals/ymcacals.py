@@ -144,11 +144,12 @@ class CalendarMerger:
 
 EPOCH = datetime.datetime.fromtimestamp(0)
 
+# pylint: disable=too-few-public-methods
 class Fetcher:
     "url fetcher which tries to be kind to servers"
-    def __init__(self):
+    def __init__(self, delta=5.0):
         self.last = {}
-        self.min_delta = datetime.timedelta(seconds=5)
+        self.min_delta = datetime.timedelta(seconds=delta)
 
     def get(self, url):
         parts = urllib.parse.urlparse(url)
@@ -158,10 +159,11 @@ class Fetcher:
         self.last[parts.netloc] = datetime.datetime.now()
         return requests.get(url, timeout=20.0)
 
-def fetch_urls(urls, test_pfx=""):
+def fetch_urls(urls, delta=5.0, _test_pfx=""):
     "fetch the various ics files from the server(s)"
+    # _test_pfx is only used for testing
     calendar_info = []
-    fetcher = Fetcher()
+    fetcher = Fetcher(delta=delta)
     with open(urls, encoding="utf-8") as urlf:
         rdr = csv.DictReader(urlf)
         assert "url" in rdr.fieldnames
@@ -172,7 +174,7 @@ def fetch_urls(urls, test_pfx=""):
             # regular expression patters for filtering
             matches = {}
             # hack for testing...
-            url = row["url"].strip().replace("{server}", test_pfx)
+            url = row["url"].strip().replace("{server}", _test_pfx)
             req = fetcher.get(url)
             cal = Calendar.from_ical(req.text)
             for key in fieldnames:
@@ -208,9 +210,11 @@ def main():
                         action="store_true")
     parser.add_argument("-C", "--cancelled", dest="confirmed", default=False,
                         action="store_false")
+    parser.add_argument("-d", "--delta", dest="delta", default=5.0,
+                        type=float)
     args = parser.parse_args()
 
-    calendars = fetch_urls(args.urls)
+    calendars = fetch_urls(args.urls, args.delta)
 
     merger = CalendarMerger(args)
     merger.verbose = args.verbose

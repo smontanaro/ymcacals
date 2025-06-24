@@ -23,8 +23,8 @@ def test_basic(httpserver):
     with open("./tests/skip.ics", encoding="utf-8") as ics:
         httpserver.expect_request("/skip.ics"). \
             respond_with_data(ics.read(), content_type="text/plain")
-        calendars = fetch_urls(Path(__file__).parent / "skip.csv",
-            httpserver.url_for("/"))
+        calendars = fetch_urls(urls=Path(__file__).parent / "skip.csv",
+            _test_pfx=httpserver.url_for("/"))
         merger = CalendarMerger(args)
         merger.verbose = False
         merged = merger.merge_cals(calendars)
@@ -41,8 +41,8 @@ def test_date_filter(httpserver):
     with open("./tests/skip.ics", encoding="utf-8") as ics:
         httpserver.expect_request("/skip.ics"). \
             respond_with_data(ics.read(), content_type="text/plain")
-        calendars = fetch_urls(Path(__file__).parent / "skip.csv",
-            httpserver.url_for("/"))
+        calendars = fetch_urls(urls=Path(__file__).parent / "skip.csv",
+            _test_pfx=httpserver.url_for("/"))
         merger = CalendarMerger(args)
         merger.verbose = False
         merger.start = datetime.date(2025, 6, 1)
