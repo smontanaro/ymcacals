@@ -7,6 +7,8 @@ import csv
 import datetime
 import re
 import sys
+import time
+import urllib.parse
 
 from icalendar import Calendar, Event
 import requests
@@ -140,9 +142,26 @@ class CalendarMerger:
         self._verbose = value
 
 
+EPOCH = datetime.datetime.fromtimestamp(0)
+
+class Fetcher:
+    "url fetcher which tries to be kind to servers"
+    def __init__(self):
+        self.last = {}
+        self.min_delta = datetime.timedelta(seconds=5)
+
+    def get(self, url):
+        parts = urllib.parse.urlparse(url)
+        last_fetch = self.last.get(parts.netloc, EPOCH)
+        if datetime.datetime.now() - last_fetch < self.min_delta:
+            time.sleep(self.min_delta.total_seconds())
+        self.last[parts.netloc] = datetime.datetime.now()
+        return requests.get(url, timeout=20.0)
+
 def fetch_urls(urls, test_pfx=""):
     "fetch the various ics files from the server(s)"
     calendar_info = []
+    fetcher = Fetcher()
     with open(urls, encoding="utf-8") as urlf:
         rdr = csv.DictReader(urlf)
         assert "url" in rdr.fieldnames
@@ -154,7 +173,7 @@ def fetch_urls(urls, test_pfx=""):
             matches = {}
             # hack for testing...
             url = row["url"].strip().replace("{server}", test_pfx)
-            req = requests.get(url, timeout=20.0)
+            req = fetcher.get(url)
             cal = Calendar.from_ical(req.text)
             for key in fieldnames:
                 if key.startswith("match:"):
