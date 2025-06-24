@@ -5,7 +5,6 @@
 import argparse
 import csv
 import datetime
-import os.path
 import re
 import sys
 
@@ -17,11 +16,88 @@ class CalendarMerger:
     "The meat of the operation"
     def __init__(self, args):
         self.verbose = args.verbose
-        self.urls = args.urls
         self.confirmed = args.confirmed
-        self.test_pfx = ""
         self.start = args.start
         self.end = args.end
+
+    # pylint: disable=too-many-branches
+    def merge_cals(self, calendars):
+        combined_cal = Calendar()
+        combined_cal.add('prodid', '-//icalcombine//NONSGML//EN')
+        combined_cal.add('version', '2.0')
+        combined_cal.add('x-wr-calname', "Lifeguard Schedule")
+        class NoMatch(Exception):
+            "Exception raised when a filtering match fails"
+            # pylint: disable=unnecessary-pass
+            pass
+
+        for (cal, matches, params) in calendars:
+            for event in cal.walk("VEVENT"):
+                try:
+                    for field, pat in matches.items():
+                        if re.match(pat, event[field], re.I) is None:
+                            raise NoMatch(f"{pat}/{event[field]}")
+                except NoMatch as exc:
+                    if self.verbose:
+                        print("Filter miss:", exc.args[0], file=sys.stderr)
+                    continue
+                if "DTSTART" not in event or "DTEND" not in event:
+                    if self.verbose:
+                        print("Event without date/time details",
+                              file=sys.stderr)
+                        continue
+                start_date = event["DTSTART"].dt.date()
+                end_date = event["DTEND"].dt.date()
+                if self.verbose:
+                    print(self.start, start_date, end_date, self.end,
+                          self.start <= start_date <= end_date <= self.end,
+                          file=sys.stderr)
+                if not self.start <= start_date <= end_date <= self.end:
+                    if self.verbose:
+                        print("Event date/time out of range",
+                              file=sys.stderr)
+                    continue
+                copy = self.copy_event(event, params)
+                combined_cal.add_component(copy)
+        return combined_cal
+
+    def copy_event(self, event, params):
+        "Copy an event, making desired field substitutions"
+        copied_event = Event()
+        for attr in event:
+            param = params.get(attr) or event[attr]
+            if self.verbose and event[attr] != param:
+                print("attr:", attr, event[attr], "->", param, file=sys.stderr)
+            if isinstance(event[attr], list):
+                for element in event[attr]:
+                    copied_event.add(attr, element)
+            else:
+                copied_event.add(attr, param)
+
+        # Confirmed status is special. We blindly override whatever is present
+        # as the STATUS attribute, and require the event has a UID. If it
+        # lacks one, we create one.
+        if "UID" not in event:
+            print("Cowardly refuse to set STATUS without a UID. Generating one.",
+                  file=sys.stderr)
+            # We use the copied event as the source for the UID because you
+            # might have two lifeguards with identical start/end times and a
+            # SUMMARY of "lifeguard." That wouldn't be very unique. We assume
+            # the SUMMARY field is overwritten to reflect the lifeguard's name.
+            copied_event["UID"] = self.generate_uid(copied_event)
+        copied_event["STATUS"] = "CONFIRMED" if self.confirmed else "CANCELLED"
+        return copied_event
+
+    def generate_uid(self, event):
+        "Generate repeatable uid."
+        uid = ""
+        for key in ("DTSTART", "DTEND"):
+            if key in event:
+                uid += event[key].dt.isoformat()
+        if "SUMMARY" in event:
+            uid += str(event["SUMMARY"])
+        assert uid
+        return hash(uid)
 
     @property
     def start(self):
@@ -63,133 +139,38 @@ class CalendarMerger:
         assert value in (True, False)
         self._verbose = value
 
-    @property
-    def urls(self):
-        "CSV file containing urls and params to process"
-        return self._urls
 
-    @urls.setter
-    def urls(self, urlfile):
-        assert os.path.exists(urlfile)
-        self._urls = urlfile
-
-    # Just for testing...
-    @property
-    def test_pfx(self):
-        "URL prefix for pytest server"
-        return self._test_pfx
-
-    @test_pfx.setter
-    def test_pfx(self, value):
-        assert isinstance(value, str)
-        self._test_pfx = value
-
-    # pylint: disable=too-many-branches
-    def merge_cals(self):
-        combined_cal = Calendar()
-        combined_cal.add('prodid', '-//icalcombine//NONSGML//EN')
-        combined_cal.add('version', '2.0')
-        combined_cal.add('x-wr-calname', "Lifeguard Schedule")
-        class NoMatch(Exception):
-            "Exception raised when a filtering match fails"
-            # pylint: disable=unnecessary-pass
-            pass
-
-        with open(self.urls, encoding="utf-8") as urlf:
-            rdr = csv.DictReader(urlf)
-            assert "url" in rdr.fieldnames
+def fetch_urls(urls, test_pfx=""):
+    "fetch the various ics files from the server(s)"
+    calendar_info = []
+    with open(urls, encoding="utf-8") as urlf:
+        rdr = csv.DictReader(urlf)
+        assert "url" in rdr.fieldnames
+        fieldnames = set(rdr.fieldnames) - set(["url"])
+        for row in rdr:
             # attribute/value pairs for substitution
             params = {}
             # regular expression patters for filtering
             matches = {}
-            fieldnames = set(rdr.fieldnames) - set(["url"])
-            uids = set()
-            for row in rdr:
-                url = row["url"].strip().replace("{server}", self.test_pfx)
-                for key in fieldnames:
-                    if key.startswith("match:"):
-                        # This is a filtering attribute
-                        _, field = key.split(":", maxsplit=1)
-                        matches[field] = row[key].strip()
-                    else:
-                        params[key] = row[key].strip()
-                req = requests.get(url, timeout=20.0)
-                cal = Calendar.from_ical(req.text)
-                for event in cal.walk("VEVENT"):
-                    try:
-                        for field, pat in matches.items():
-                            if re.match(pat, event[field], re.I) is None:
-                                raise NoMatch(f"{pat}/{event[field]}")
-                    except NoMatch as exc:
-                        if self.verbose:
-                            print("Filter miss:", exc.args[0], file=sys.stderr)
-                        continue
-                    if "DTSTART" not in event or "DTEND" not in event:
-                        if self.verbose:
-                            print("Event without date/time details",
-                                  file=sys.stderr)
-                            continue
-                    start_date = event["DTSTART"].dt.date()
-                    end_date = event["DTEND"].dt.date()
-                    if self.verbose:
-                        print(self.start, start_date, end_date, self.end,
-                              self.start <= start_date <= end_date <= self.end,
-                              file=sys.stderr)
-                    if not self.start <= start_date <= end_date <= self.end:
-                        if self.verbose:
-                            print("Event date/time out of range",
-                                  file=sys.stderr)
-                        continue
-                    copy = self.copy_event(event, params)
-                    assert copy["UID"] not in uids
-                    uids.add(copy["UID"])
-                    combined_cal.add_component(copy)
-        return combined_cal
-
-    def copy_event(self, event, params):
-        "Copy an event, making desired field substitutions"
-        copied_event = Event()
-        for attr in event:
-            param = params.get(attr) or event[attr]
-            if self.verbose and event[attr] != param:
-                print("attr:", attr, event[attr], "->", param, file=sys.stderr)
-            if isinstance(event[attr], list):
-                for element in event[attr]:
-                    copied_event.add(attr, element)
-            else:
-                copied_event.add(attr, param)
-
-        # Confirmed status is special. We blindly override whatever is present
-        # as the STATUS attribute, and require the event has a UID. If it
-        # lacks one, we create one.
-        if "UID" not in event:
-            print("Cowardly refuse to set STATUS without a UID. Generating one.",
-                  file=sys.stderr)
-            # We use the copied event as the source for the UID because you
-            # might have two lifeguards with identical start/end times and a
-            # SUMMARY of "lifeguard." That wouldn't be very unique. We assume
-            # the SUMMARY field is overwritten to reflect the lifeguard's name.
-            copied_event["UID"] = self.generate_uid(copied_event)
-        copied_event["STATUS"] = "CONFIRMED" if self.confirmed else "CANCELLED"
-        return copied_event
-
-    def generate_uid(self, event):
-        "Generate repeatable uid."
-        uid = ""
-        for key in ("DTSTART", "DTEND"):
-            if key in event:
-                uid += event[key].dt.isoformat()
-        if "SUMMARY" in event:
-            uid += str(event["SUMMARY"])
-        assert uid
-        return hash(uid)
-
+            # hack for testing...
+            url = row["url"].strip().replace("{server}", test_pfx)
+            req = requests.get(url, timeout=20.0)
+            cal = Calendar.from_ical(req.text)
+            for key in fieldnames:
+                if key.startswith("match:"):
+                    # This is a filtering attribute
+                    _, field = key.split(":", maxsplit=1)
+                    matches[field] = row[key].strip()
+                else:
+                    params[key] = row[key].strip()
+            calendar_info.append([cal, matches, params])
+    return calendar_info
 
 # from https://gist.github.com/monkut/e60eea811ef085a6540f
 def parse_date_arg(date_str):
     """custom argparse *date* type for user dates"""
     try:
-        return datetime.datetime.strptime(date_str, "%Y-%m-%d")
+        return datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError as exc:
         msg = f"Date ({date_str}) not valid! Expected format, YYYY-MM-DD!"
         raise argparse.ArgumentTypeError(msg) from exc
@@ -210,9 +191,11 @@ def main():
                         action="store_false")
     args = parser.parse_args()
 
+    calendars = fetch_urls(args.urls)
+
     merger = CalendarMerger(args)
     merger.verbose = args.verbose
-    combined_cal = merger.merge_cals()
+    combined_cal = merger.merge_cals(calendars)
     if args.output is not None:
         with open(args.output, mode="w", encoding="utf-8") as outf:
             print(combined_cal.to_ical().decode(), file=outf)

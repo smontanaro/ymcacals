@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import datetime
 from pathlib import Path
 
-from ymcacals.ymcacals import CalendarMerger
+from ymcacals.ymcacals import CalendarMerger, fetch_urls
 
 
 @dataclass
@@ -19,15 +19,15 @@ class Args:
 
 def test_basic(httpserver):
     args = Args()
-    args.urls = Path(__file__).parent / "skip.csv"
     args.confirmed = True
     with open("./tests/skip.ics", encoding="utf-8") as ics:
         httpserver.expect_request("/skip.ics"). \
             respond_with_data(ics.read(), content_type="text/plain")
+        calendars = fetch_urls(Path(__file__).parent / "skip.csv",
+            httpserver.url_for("/"))
         merger = CalendarMerger(args)
-        merger.test_pfx = httpserver.url_for("/")
         merger.verbose = False
-        merged = merger.merge_cals()
+        merged = merger.merge_cals(calendars)
         assert len(merged.events) == 29
         uids = set()
         for event in merged.events:
@@ -37,15 +37,15 @@ def test_basic(httpserver):
 
 def test_date_filter(httpserver):
     args = Args()
-    args.urls = Path(__file__).parent / "skip.csv"
     args.confirmed = True
     with open("./tests/skip.ics", encoding="utf-8") as ics:
         httpserver.expect_request("/skip.ics"). \
             respond_with_data(ics.read(), content_type="text/plain")
+        calendars = fetch_urls(Path(__file__).parent / "skip.csv",
+            httpserver.url_for("/"))
         merger = CalendarMerger(args)
-        merger.test_pfx = httpserver.url_for("/")
         merger.verbose = False
         merger.start = datetime.date(2025, 6, 1)
         merger.end = datetime.date(2025, 7, 1)
-        merged = merger.merge_cals()
+        merged = merger.merge_cals(calendars)
         assert len(merged.events) == 7
