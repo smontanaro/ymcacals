@@ -212,9 +212,12 @@ def main():
                         action="store_false")
     parser.add_argument("-d", "--delta", dest="delta", default=5.0,
                         type=float)
+    parser.add_argument("--test_pfx", dest="_test_pfx", default="",
+                        help="TESTING ONLY!")
     args = parser.parse_args()
 
-    calendars = fetch_urls(args.urls, args.delta)
+    calendars = fetch_urls(urls=args.urls, delta=args.delta,
+        _test_pfx=args._test_pfx)
 
     merger = CalendarMerger(args)
     merger.verbose = args.verbose

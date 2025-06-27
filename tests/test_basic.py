@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 import datetime
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -57,3 +59,18 @@ def test_date_filter(httpserver, verbose):
         merger.end = datetime.date(2025, 7, 1)
         merged = merger.merge_cals(calendars)
         assert len(merged.events) == 7
+
+
+@pytest.mark.parametrize(("start", "end", "returncode",),
+                         [("2025-06-01", "2025-07-01", 0),
+                          ("2025-06-01", "2025-07-zz", 2)])
+def test_cli(httpserver, start, end, returncode):
+    with open("./tests/skip.ics", encoding="utf-8") as ics:
+        httpserver.expect_request("/skip.ics"). \
+            respond_with_data(ics.read(), content_type="text/plain")
+        result = subprocess.run([sys.executable, "-m", "ymcacals.ymcacals",
+            "-u", Path(__file__).parent / "skip.csv", "-o", "/dev/stdout",
+            "--test_pfx", httpserver.url_for("/"), "--delta", "0.1",
+            "--start", start, "--end", end],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        assert result.returncode == returncode
