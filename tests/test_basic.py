@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import datetime
 from pathlib import Path
 
+import pytest
+
 from ymcacals.ymcacals import CalendarMerger, fetch_urls
 
 
@@ -17,34 +19,40 @@ class Args:
     verbose: bool = False
     confirmed: bool = True
 
-def test_basic(httpserver):
+@pytest.mark.parametrize(("verbose",),
+                         [(True,), (False,)])
+def test_basic(httpserver, verbose):
     args = Args()
     args.confirmed = True
+    args.verbose = verbose
     with open("./tests/skip.ics", encoding="utf-8") as ics:
         httpserver.expect_request("/skip.ics"). \
             respond_with_data(ics.read(), content_type="text/plain")
         calendars = fetch_urls(urls=Path(__file__).parent / "skip.csv",
-            _test_pfx=httpserver.url_for("/"))
+            _test_pfx=httpserver.url_for("/"),
+            delta=0.1)
         merger = CalendarMerger(args)
-        merger.verbose = False
         merged = merger.merge_cals(calendars)
-        assert len(merged.events) == 29
+        assert len(merged.events) == 28
         uids = set()
         for event in merged.events:
             assert event["SUMMARY"].lower() == "skip m"
             uids.add(event["UID"])
         assert len(uids) == len(merged.events)
 
-def test_date_filter(httpserver):
+@pytest.mark.parametrize(("verbose",),
+                         [(True,), (False,)])
+def test_date_filter(httpserver, verbose):
     args = Args()
     args.confirmed = True
+    args.verbose = verbose
     with open("./tests/skip.ics", encoding="utf-8") as ics:
         httpserver.expect_request("/skip.ics"). \
             respond_with_data(ics.read(), content_type="text/plain")
         calendars = fetch_urls(urls=Path(__file__).parent / "skip.csv",
-            _test_pfx=httpserver.url_for("/"))
+            _test_pfx=httpserver.url_for("/"),
+            delta=0.1)
         merger = CalendarMerger(args)
-        merger.verbose = False
         merger.start = datetime.date(2025, 6, 1)
         merger.end = datetime.date(2025, 7, 1)
         merged = merger.merge_cals(calendars)

@@ -47,7 +47,7 @@ class CalendarMerger:
                     if self.verbose:
                         print("Event without date/time details",
                               file=sys.stderr)
-                        continue
+                    continue
                 start_date = event["DTSTART"].dt.date()
                 end_date = event["DTEND"].dt.date()
                 if self.verbose:
