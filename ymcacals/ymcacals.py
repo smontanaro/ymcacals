@@ -196,7 +196,7 @@ def parse_date_arg(date_str):
         msg = f"Date ({date_str}) not valid! Expected format, YYYY-MM-DD!"
         raise argparse.ArgumentTypeError(msg) from exc
 
-def main():
+def get_argument_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-u", "--urls", dest="urls", required=True)
     parser.add_argument("-o", "--output", dest="output")
@@ -214,7 +214,11 @@ def main():
                         type=float)
     parser.add_argument("--test_pfx", dest="_test_pfx", default="",
                         help="TESTING ONLY!")
-    args = parser.parse_args()
+    return parser
+
+def main():
+    p = get_argument_parser()
+    args = p.parse_args()
 
     calendars = fetch_urls(urls=args.urls, delta=args.delta,
         _test_pfx=args._test_pfx)
