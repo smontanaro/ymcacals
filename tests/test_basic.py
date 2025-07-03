@@ -61,16 +61,19 @@ def test_date_filter(httpserver, verbose):
         assert len(merged.events) == 7
 
 
+@pytest.mark.parametrize(("verbose",),
+                         [(True,), (False,)])
 @pytest.mark.parametrize(("start", "end", "returncode",),
                          [("2025-06-01", "2025-07-01", 0),
                           ("2025-06-01", "2025-07-zz", 2)])
-def test_cli(httpserver, start, end, returncode):
+def test_cli(httpserver, start, end, returncode, verbose):
+    confirmed = "-c" if verbose else "-C"
     with open("./tests/skip.ics", encoding="utf-8") as ics:
         httpserver.expect_request("/skip.ics"). \
             respond_with_data(ics.read(), content_type="text/plain")
         result = subprocess.run([sys.executable, "-m", "ymcacals.ymcacals",
             "-u", Path(__file__).parent / "skip.csv", "-o", "/dev/stdout",
             "--test_pfx", httpserver.url_for("/"), "--delta", "0.1",
-            "--start", start, "--end", end],
+            "--start", start, "--end", end, confirmed,],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         assert result.returncode == returncode
