@@ -198,22 +198,29 @@ def parse_date_arg(date_str):
 
 def get_argument_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-u", "--urls", dest="urls", required=True)
-    parser.add_argument("-o", "--output", dest="output")
+    parser.add_argument("-u", "--urls", dest="urls", required=True,
+                        help="CSV file containing ICS URLs, etc")
+    parser.add_argument("-o", "--output", dest="output",
+                        help="Output file for merged calendars")
     parser.add_argument("-s", "--start", dest="start", type=parse_date_arg,
-                        default=datetime.date(2000, 1, 1))
+                        default=datetime.date(2000, 1, 1),
+                        help="Earliest date to include in output")
     parser.add_argument("-e", "--end", dest="end", type=parse_date_arg,
-                        default=datetime.date(2050, 12, 31))
+                        default=datetime.date(2050, 12, 31),
+                        help="Last date to include in output")
     parser.add_argument("-v", "--verbose", dest="verbose", default=False,
-                        action="store_true")
+                        action="store_true", help="Be chattier")
     parser.add_argument("-c", "--confirmed", dest="confirmed", default=True,
-                        action="store_true")
+                        action="store_true",
+                        help="Generate 'status=confirmed' records")
     parser.add_argument("-C", "--cancelled", dest="confirmed", default=False,
-                        action="store_false")
-    parser.add_argument("-d", "--delta", dest="delta", default=5.0,
-                        type=float)
+                        action="store_false",
+                        help="Generate 'status=cancelled' records")
+    parser.add_argument("-d", "--delta", dest="delta", default=0.5,
+                        type=float,
+                        help="Delay in seconds before querying the same server")
     parser.add_argument("--test_pfx", dest="_test_pfx", default="",
-                        help="TESTING ONLY!")
+                        help="Ignore - TESTING ONLY!")
     return parser
 
 def main():
