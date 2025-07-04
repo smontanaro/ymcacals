@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ymcacals"
-version = "0.4.0"
+version = "0.5.1"
 authors = [
     { name = "Skip Montanaro", email = "skip.montanaro@gmail.com" },
 ]
@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "icalendar>=6.3.1",
-    "requests>=2.32.3"
+    "requests>=2.32.3",
 ]
 
 [tool.setuptools.packages.find]
